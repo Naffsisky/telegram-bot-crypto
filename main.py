@@ -40,20 +40,20 @@ def init_db():
 
 
 def get_crypto_price(symbol: str) -> float:
-    """Get the current price of a cryptocurrency in USDT."""
+    """Get the current price of a cryptocurrency in IDR."""
     try:
         url = f"{CMC_BASE_URL}/cryptocurrency/quotes/latest"
         headers = {"X-CMC_PRO_API_KEY": CMC_API_KEY, "Accept": "application/json"}
         params = {
             "symbol": symbol,
-            "convert": "USD",  # CoinMarketCap uses USD as base currency
+            "convert": "IDR",  # CoinMarketCap uses IDR as base currency
         }
 
         response = requests.get(url, headers=headers, params=params, timeout=10)
         data = response.json()
 
         if response.status_code == 200 and data["status"]["error_code"] == 0:
-            return float(data["data"][symbol]["quote"]["USD"]["price"])
+            return float(data["data"][symbol]["quote"]["IDR"]["price"])
         else:
             print(f"Error from CMC API: {data['status']['error_message']}")
             return None
@@ -65,8 +65,9 @@ def get_crypto_price(symbol: str) -> float:
 def send_price_reminder(chat_id: int, symbol: str):
     """Send a price reminder to a specific chat."""
     price = get_crypto_price(symbol)
+    formatted_price = "{:,.2f}".format(price).replace(",", ".")
     if price is not None:
-        message = f"🔔 Price Alert for {symbol}\n💰 Current price: ${price:.3f} USDT"
+        message = f"🔔 Price Alert for {symbol}\n💰 Rp{formatted_price}"
         bot.send_message(chat_id, message)
     else:
         bot.send_message(chat_id, f"❌ Error getting price for {symbol}")
@@ -200,10 +201,11 @@ def set_reminder(message):
 
         # Get and send current price to verify it works
         price = get_crypto_price(symbol)
+        formatted_price = "{:,.2f}".format(price).replace(",", ".")
         if price is not None:
             bot.reply_to(
                 message,
-                f" Testing price fetch for {symbol}...\n Current price: ${price:.3f} USD",
+                f" 🔎 Testing price fetch for {symbol}\n💸 Current price: Rp{formatted_price}",
             )
         else:
             bot.reply_to(
@@ -273,7 +275,8 @@ def get_price(message):
         price = get_crypto_price(symbol)
 
         if price is not None:
-            bot.reply_to(message, f" {symbol} price: ${price:.2f} USDT")
+            formatted_price = "{:,.2f}".format(price).replace(",", ".")
+            bot.reply_to(message, f" 🟡 {symbol}\n💸 Price: Rp{formatted_price}")
         else:
             bot.reply_to(message, f" Error getting price for {symbol}")
 
