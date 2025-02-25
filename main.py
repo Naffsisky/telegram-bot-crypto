@@ -36,6 +36,18 @@ def init_db():
             )
         """
         )
+        # Create watchlist table
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS watchlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                symbol TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(chat_id, symbol)
+            )
+        """
+        )
         conn.commit()
 
 
@@ -131,6 +143,81 @@ def check_reminders(single_check=False):
         time.sleep(60)  # Check every minute
 
 
+def add_to_watchlist(message, symbols):
+    """Add cryptocurrencies to watchlist."""
+    added = []
+    errors = []
+    
+    for symbol in symbols:
+        # Check if symbol is valid
+        price = get_crypto_price(symbol)
+        if price is None:
+            errors.append(symbol)
+            continue
+            
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO watchlist (chat_id, symbol) VALUES (?, ?)",
+                    (message.chat.id, symbol)
+                )
+                conn.commit()
+            added.append(symbol)
+        except Exception as e:
+            print(f"Error adding {symbol} to watchlist: {e}")
+            errors.append(symbol)
+    
+    response = ""
+    if added:
+        response += f"✅ Successfully added\n{', '.join(added)}\n"
+    if errors:
+        response += f"❌ Failed to add\n{', '.join(errors)}"
+    
+    bot.reply_to(message, response or "❌ No items added to watchlist.")
+
+
+def remove_from_watchlist(message, symbols):
+    """Remove cryptocurrencies from watchlist."""
+    with sqlite3.connect(DB_FILE) as conn:
+        placeholders = ','.join(['?'] * len(symbols))
+        params = symbols + [message.chat.id]
+        cursor = conn.execute(
+            f"DELETE FROM watchlist WHERE symbol IN ({placeholders}) AND chat_id = ?",
+            params
+        )
+        conn.commit()
+        
+        if cursor.rowcount > 0:
+            bot.reply_to(message, f"✅ Successfully removed\n{', '.join(symbols)}")
+        else:
+            bot.reply_to(message, "❌ No items removed from watchlist.")
+
+
+def show_watchlist(message):
+    """Show all items in the user's watchlist with current prices."""
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.execute(
+            "SELECT symbol FROM watchlist WHERE chat_id = ? ORDER BY symbol",
+            (message.chat.id,)
+        )
+        symbols = [row[0] for row in cursor.fetchall()]
+    
+    if not symbols:
+        bot.reply_to(message, "📋 Your watchlist is empty. Create wishlist using /wishlist SYMBOL")
+        return
+        
+    # Get prices for all symbols
+    result = ["📋 Your Watchlist:"]
+    for symbol in symbols:
+        price = get_crypto_price(symbol)
+        if price is not None:
+            formatted_price = "{:,.2f}".format(price).replace(",", ".")
+            result.append(f"🟡 {symbol}: Rp{formatted_price}")
+        else:
+            result.append(f"🟡 {symbol}: Failed to get price.")
+    
+    bot.reply_to(message, "\n".join(result))
+
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     """Handle the /start command."""
@@ -146,6 +233,7 @@ def send_welcome(message):
         "0 */2 * * * - Every 2 hours\n"
         "0 10 * * * - Every day at 10:00\n\n"
         "Use /myreminders to see your active reminders\n"
+        "Use /watchlist to manage your watchlist\n\n"
         "Use /help for more information"
     )
     bot.reply_to(message, welcome_text)
@@ -159,6 +247,7 @@ def send_help(message):
         "/setreminder SYMBOL CRON - Set a new price reminder\n"
         "/myreminders - List your active reminders\n"
         "/removereminder SYMBOL - Remove a reminder\n"
+        "/watchlist - Manage your watchlist\n"
         "/price SYMBOL - Get current price\n\n"
         "Cron Expression Examples:\n"
         "*/30 * * * * - Every 30 minutes\n"
@@ -283,6 +372,29 @@ def get_price(message):
     except IndexError:
         bot.reply_to(message, " Please specify a symbol\nExample: /price BTC")
 
+@bot.message_handler(commands=["watchlist"])
+def handle_watchlist(message):
+    """Handle the /watchlist command."""
+    args = message.text.split()
+    
+    if len(args) == 1:
+        show_watchlist(message)
+    elif len(args) >= 3 and args[1].lower() == "add":
+        # /watchlist add SYMBOL1 SYMBOL2 ...
+        symbols = [s.upper() for s in args[2:]]
+        add_to_watchlist(message, symbols)
+    elif len(args) >= 3 and args[1].lower() == "remove":
+        # /watchlist remove SYMBOL1 SYMBOL2 ...
+        symbols = [s.upper() for s in args[2:]]
+        remove_from_watchlist(message, symbols)
+    else:
+        usage_text = (
+            "Usage:\n"
+            "/watchlist - Show watchlist\n"
+            "/watchlist add SYMBOL1 SYMBOL2 ... - Add watchlist\n"
+            "/watchlist remove SYMBOL1 SYMBOL2 ... - Remove from watchlist"
+        )
+        bot.reply_to(message, usage_text)
 
 if __name__ == "__main__":
     # Initialize database
