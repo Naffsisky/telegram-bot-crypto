@@ -28,7 +28,13 @@ def send_help(message):
         "/watchlist add SYMBOL - Tambah ke watchlist\n"
         "/removewatchlist SYMBOL - Hapus dari watchlist\n\n"
         "/price SYMBOL - Cek harga\n"
-        "/help - Tampilkan bantuan"
+        "/help - Tampilkan bantuan\n\n"
+        "Example SYMBOL: BTC ETH SOL\n\n"
+        "Example CRON: \n"
+        "*/30 * * * * - Every 30 minutes\n"
+        "0 */2 * * * - Every 2 hours\n"
+        "0 10 * * * - Every day at 10:00\n"
+        "0 9-17 * * 1-5 - Every hour from 9-5 on weekdays"
     )
     bot.reply_to(message, help_text)
 
